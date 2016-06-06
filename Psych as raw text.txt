@@ -1,4 +1,4 @@
-'The function and subfunctions defined herein come with no warranty or certification of fitness for any purpose
+'The comes under an MIT licence with no warranty or certification of fitness for any purpose
 
 'Do not use these functions for conditions outside boundaries defined by their original sources.
 'Subfunctions use equations from the following sources:
