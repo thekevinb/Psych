@@ -1,0 +1,339 @@
+'The function and subfunctions defined herein come with no warranty or certification of fitness for any purpose
+
+'Do not use these functions for conditions outside boundaries defined by their original sources.
+'Subfunctions use equations from the following sources:
+    'ASHRAE Fundamentals, 2005, SI Edition Chapter 6
+
+
+'The function will calculate various properties of moist air. Properties calculated include Wet Bulb, Dew Point, Relative Humidity, Humidity Ratio, Vapor Pressure, Degree of Saturation, enthalpy, specific volume of dry air, and moist air density.
+'The function requires input of: barometric pressure, temperature, and one other parameter.  This third parameter car be Wet Bulb, Dew Point, RH, or Humidity Ratio.
+
+
+'Also included are STD_Press(Elevation) and STD_Temp(Elevation)
+
+Function Psych(P, Tdb, InV, InNum, OutNum, Optional SIq) As Double
+
+
+'Psych was originally made for the WCEC to have simular syntax to a troublesome plugin we were already using.
+'Psych will calculate properties of most air. It can calculate
+'Wet Bulb, Dew Point, RH, Humidity Ratio, Vapor Pressure, degree of saturation, enthalpy, or specific volume of dry air, or moist air density
+'based up Pressure, Temperature, and one other parameter.  This other parameter can be Wet Bulb, Dew Point, RH, Humidity Ratio, or Enthalpy.
+
+'psych(P,Tdb,InV,InNum,OutNum, SIq)
+
+'Where
+'P is the barometric pressure in PSI or Pa.
+'Tdb is the dry bulb in F or C
+'InV is another parameter of choice (Wet bulb, Dew point, RH, Humidity Ratio, or Enthalpy)
+'InNum is the number that corrisponds to your choice of InV's parameter (1 through 4 or 7 respectivly)
+'OutNum is the value requested.  It should be an integer between 1 and 10 excluding 8.  See below
+'SIq is the optional unit selector.  0 is IP, 1 is SI.  0/IP is default if ommitted.
+
+
+'The Numbers for InNum and OutNum are
+
+'1 Web Bulb Temp            F or C                              Valid for Input
+'2 Dew point                F or C                              Valid for input
+'3 RH                       between 0 and 1                     Valid for input
+'4 Humidity Ratio           Mass Water/ Mass Dry Air            Valid for input
+'5 Water Vapor Pressure     PSI or Pa
+'6 Degree of Saturation     between 0 and 1
+'7 Enthalpy                 BTU/lb dry air or kJ/kg dry air     Valid for input
+    'Warning 0 state for IP is ~0F, 0% RH ,and  1 ATM, 0 state for SI is 0C, 0%RH and 1 ATM
+'8 NOT VALID, Should be entropy
+'9 Specific Volume          ft^3/lbm or m^3/kg dry air
+'10 Moist Air Density       lb/ft^3 or m^3/kg
+
+
+Dim Twb As Double, Dew As Double, RH As Double, W As Double, h As Double, Out As Double
+
+
+If IsMissing(SIq) Then
+    SIq = 0
+End If
+    
+If SIq = 1 Then
+
+    P = P / 1000  'Turns Pa to kPA
+    If InNum = 1 Then
+        Twb = InV
+    ElseIf InNum = 2 Then
+        Dew = InV
+    ElseIf InNum = 3 Then
+        RH = InV
+    ElseIf InNum = 4 Then
+        W = InV
+    ElseIf InNum = 7 Then
+        h = InV
+    End If
+Else  'This section turns US Customary Units to SI units
+    Tdb = (Tdb - 32) / 1.8
+    P = P * 4.4482216152605 / 0.0254 ^ 2 / 1000     'PSI to kPa  Conversion factor exact
+    If InNum = 1 Then
+        Twb = (InV - 32) / 1.8                      'F to C
+    ElseIf InNum = 2 Then
+        Dew = (InV - 32) / 1.8                      'F to C
+    ElseIf InNum = 3 Then
+        RH = InV                                    'no need to change
+    ElseIf InNum = 4 Then
+        W = InV                                     'no need to change
+    ElseIf InNum = 7 Then
+        h = InV * 1.055056 / 0.45359237 - 17.884444444
+        ' 1.055056 kJ/(ISO_BTU)  .45359237 kg/lb   '17.884444 kJ/kg 0 pt difference [Dry air at 0C and  dry air at 0F are both 0 enthalpy in their respective units]
+    End If
+End If
+
+If OutNum = 3 Or OutNum = 1 Then                    'Find RH
+    If InNum = 1 Then                               'given Twb
+        RH = Rel_hum(Tdb, Twb, P)
+    ElseIf InNum = 2 Then                           'given Dew
+        RH = Sat_press(Dew) / Sat_press(Tdb)
+    ElseIf InNum = 3 Then                           'given RH
+        'RH already Set
+    ElseIf InNum = 4 Then                           'given W
+        RH = Part_press(P, W) / Sat_press(Tdb)
+    ElseIf InNum = 7 Then
+        W = (1.006 * Tdb - h) / (-(2501 + 1.86 * Tdb))
+        ' Algebra from 2005 ASHRAE Handbook - Fundamentals - SI P6.9 eqn 32
+        RH = Part_press(P, W) / Sat_press(Tdb)
+    End If
+Else 'find W
+    If InNum = 1 Then 'Given Twb
+        W = Hum_rat(Tdb, Twb, P)
+    ElseIf InNum = 2 Then 'Given Dew
+        W = 0.621945 * Sat_press(Dew) / (P - Sat_press(Dew))
+        'Equation taken from eq 20 of 2009 Fundemental chapter 1
+    ElseIf InNum = 3 Then 'Given RH
+        W = Hum_rat2(Tdb, RH, P)
+    ElseIf InNum = 4 Then 'Given W
+        'W already known
+    ElseIf InNum = 7 Then 'Given h
+        W = (1.006 * Tdb - h) / (-(2501 + 1.86 * Tdb))
+        ' Algebra from 2005 ASHRAE Handbook - Fundamentals - SI P6.9 eqn 32
+    End If
+End If
+
+'P, Tdb, and W are now availible
+
+If OutNum = 1 Then 'requesting Twb
+    Out = Wet_bulb(Tdb, RH, P)
+ElseIf OutNum = 2 Then 'requesting Dew
+    Out = Dew_point(P, W)
+ElseIf OutNum = 3 Then 'Request RH
+    Out = RH
+ElseIf OutNum = 4 Then 'Request W
+    Out = W
+ElseIf OutNum = 5 Then 'Request Pw
+    Out = Part_press(P, W) * 1000
+ElseIf OutNum = 6 Then 'Request deg of sat
+    Out = W / Hum_rat2(Tdb, 1, P)
+    'the middle arg of Hum_rat2 is suppose to be RH.  RH is suppose to be 100%
+ElseIf OutNum = 7 Then 'Request enthalpy
+    Out = Enthalpy_Air_H2O(Tdb, W)
+ElseIf OutNum = 8 Then 'Request entropy
+    Out = 5 / 0
+    'don't have equation for Entropy, so I divided by zero to induce an error.  I don't know how to induce a verbose error.
+ElseIf OutNum = 9 Then 'Request specific volume
+    Out = 1 / (Dry_Air_Density(P, Tdb, W))
+ElseIf OutNum = 10 Then 'Request density
+    Out = Dry_Air_Density(P, Tdb, W) * (1 + W)
+End If
+
+If SIq = 0 Then 'Convert to IP
+    If OutNum = 1 Or OutNum = 2 Then 'Temperature
+        Out = 1.8 * Out + 32
+    'OutNum 3 and 4 (RH and W) are unitless
+    ElseIf OutNum = 5 Then 'Pressure
+        Out = Out * 0.0254 ^ 2 / 4.448230531
+    ElseIf OutNum = 7 Then 'Enthalpy
+        Out = (Out + 17.88444444444) * 0.45359237 / 1.055056
+        'Warning, 0 convention changes.  Be carefull with units.
+    ElseIf OutNum = 9 Then 'Specific Volume
+        Out = Out * 0.45359265 / ((12 * 0.0254) ^ 3)
+    ElseIf OutNum = 10 Then 'Density
+        Out = Out * (12 * 0.0254) ^ 3 / 0.45359265
+    End If
+End If
+Psych = Out
+End Function
+
+Function Part_press(P, W) As Double
+' Function to compute partial vapor pressure in [kPa]
+' From page 6.9 equation 38 in ASHRAE Fundamentals handbook (2005)
+'   P = ambient pressure [kPa]
+'   W = humidity ratio [kg/kg dry air]
+
+    Part_press = P * W / (0.62198 + W)
+End Function
+Function Sat_press(Tdb) As Double
+' Function to compute saturation vapor pressure in [kPa]
+' ASHRAE Fundamentals handbood (2005) p 6.2, equation 5 and 6
+'   Tdb = Dry bulb temperature [degC]
+' Valid from -100C to 200 C
+
+    C1 = -5674.5359
+    C2 = 6.3925247
+    C3 = -0.009677843
+    C4 = 0.00000062215701
+    C5 = 2.0747825E-09
+    C6 = -9.484024E-13
+    C7 = 4.1635019
+    C8 = -5800.2206
+    C9 = 1.3914993
+    C10 = -0.048640239
+    C11 = 0.000041764768
+    C12 = -0.000000014452093
+    C13 = 6.5459673
+ 
+    TK = Tdb + 273.15         'Converts from degC to degK
+    
+    If TK <= 273.15 Then
+        Sat_press = Exp(C1 / TK + C2 + C3 * TK + C4 * TK ^ 2 + C5 * TK ^ 3 + C6 * TK ^ 4 + C7 * Log(TK)) / 1000
+    Else
+        Sat_press = Exp(C8 / TK + C9 + C10 * TK + C11 * TK ^ 2 + C12 * TK ^ 3 + C13 * Log(TK)) / 1000
+    End If
+
+End Function
+Function Hum_rat(Tdb, Twb, P) As Double
+' Function to calculate humidity ratio [kg H2O/kg air]
+' Given dry bulb and wet bulb temp inputs [degC]
+' ASHRAE Fundamentals handbood (2005)
+'   Tdb = Dry bulb temperature [degC]
+'   Twb = Wet bulb temperature [degC]
+'   P = Ambient Pressure [kPa]
+    
+    Pws = Sat_press(Twb)
+    Ws = 0.62198 * Pws / (P - Pws)       ' Equation 23, p6.8
+    If Tdb >= 0 Then
+        ' Equation 35, p6.9
+        Hum_rat = ((2501 - 2.326 * Twb) * Ws - 1.006 * (Tdb - Twb)) / (2501 + 1.86 * Tdb - 4.186 * Twb)
+    Else
+        ' Equation 37, p6.9
+        Hum_rat = ((2830 - 0.24 * Twb) * Ws - 1.006 * (Tdb - Twb)) / (2830 + 1.86 * Tdb - 2.1 * Twb)
+    End If
+End Function
+
+
+Function Hum_rat2(Tdb, RH, P) As Double
+' Function to calculate humidity ratio [kg H2O/kg air]
+' Given dry bulb and wet bulb temperature inputs [degC]
+' ASHRAE Fundamentals handbood (2005)
+'   Tdb = Dry bulb temperature [degC]
+'   RH = Relative Humidity [Fraction or %]
+'   P = Ambient Pressure [kPa]
+    
+    Pws = Sat_press(Tdb)
+    Hum_rat2 = 0.62198 * RH * Pws / (P - RH * Pws)   ' Equation 22, 24, p6.8
+End Function
+
+
+Function Rel_hum(Tdb, Twb, P)
+' Calculates relative humidity ratio
+' ASHRAE Fundamentals handbood (2005)
+'   Tdb = Dry bulb temperature [degC]
+'   Twb = Wet bulb temperature [degC]
+'   P = Ambient Pressure [kPa]
+
+    W = Hum_rat(Tdb, Twb, P)
+    Rel_hum = Part_press(P, W) / Sat_press(Tdb)          ' Equation 24, p6.8
+End Function
+
+
+
+Function Rel_hum2(Tdb, W, P)
+' Calculates the relative humidity given:
+'   Tdb = Dry bulb temperature [degC]
+'   P = ambient pressure [kPa]
+'   W = humidity ratio [kg/kg dry air]
+
+    Pw = Part_press(P, W)
+    Pws = Sat_press(Tdb)
+    Rel_hum2 = Pw / Pws
+End Function
+
+
+
+Function Wet_bulb(Tdb, RH, P)
+' Calculates the Wet Bulb temp given dry blub temp [degC] and Relative Humidity
+' Uses Newton-Rhapson iteration to converge quickly
+'   Tdb = Dry bulb temperature [degC]
+'   RH = Relative humidity ratio [Fraction or %]
+'   P = Ambient Pressure [kPa]
+
+    W_normal = Hum_rat2(Tdb, RH, P)
+    Wet_bulb = Tdb
+    ' Solve to within 0.001% accuracy using Newton-Rhapson
+    W_new = Hum_rat(Tdb, Wet_bulb, P)
+    Do While Abs((W_new - W_normal) / W_normal) > 0.00001
+        W_new2 = Hum_rat(Tdb, Wet_bulb - 0.001, P)
+        dw_dtwb = (W_new - W_new2) / 0.001
+        Wet_bulb = Wet_bulb - (W_new - W_normal) / dw_dtwb
+        W_new = Hum_rat(Tdb, Wet_bulb, P)
+    Loop
+End Function
+
+Function Enthalpy_Air_H2O(Tdb, W)
+' Calculates enthalpy in kJ/kg (dry air)
+'   Tdb = Dry bulb temperature [degC]
+'   W = Humidity Ratio [kg/kg dry air]
+
+    ' Calculations from 2005 ASHRAE Handbook - Fundamentals - SI P6.9 eqn 32
+    Enthalpy_Air_H2O = 1.006 * Tdb + W * (2501 + 1.86 * Tdb)
+
+End Function
+
+
+Function Dew_point(P, W) As Double
+' Function to compute the dew point temperature (deg C)
+' From page 6.9 equation 39 and 40 in ASHRAE Fundamentals handbook (2005)
+'   P = ambient pressure [kPa]
+'   W = humidity ratio [kg/kg dry air]
+'   Valid for Dew Points less than 93 C
+
+    C14 = 6.54
+    C15 = 14.526
+    C16 = 0.7389
+    C17 = 0.09486
+    C18 = 0.4569
+    
+    Pw = Part_press(P, W)
+    alpha = Log(Pw)
+    Tdp1 = C14 + C15 * alpha + C16 * alpha ^ 2 + C17 * alpha ^ 3 + C18 * Pw ^ 0.1984
+    Tdp2 = 6.09 + 12.608 * alpha + 0.4959 * alpha ^ 2
+    If Tdp1 >= 0 Then
+        Dew_point = Tdp1
+    Else
+        Dew_point = Tdp2
+    End If
+End Function
+
+Function Dry_Air_Density(P, Tdb, W)
+' Function to compute the dry air density (kg_dry_air/m^3), using pressure
+' [kPa], temperature [C] and humidity ratio
+' From page 6.8 equation 28 ASHRAE Fundamentals handbook (2005)
+' [rho_dry_air] = Dry_Air_Density(P, Tdb, w)
+' Note that total density of air-h2o mixture is:
+' rho_air_h2o = rho_dry_air * (1 + W)
+' gas constant for dry air
+
+    R_da = 287.055
+    Dry_Air_Density = 1000 * P / (R_da * (273.15 + Tdb) * (1 + 1.6078 * W))
+End Function
+
+
+'ATMOSPHERE ATMOSPHERE ATMOSPHERE ATMOSPHERE
+
+Function STD_Press(Elevation)
+' Module to calculate the standard pressure [kPa] at given elevation (meters)
+'   ASHRAE Fundamentals 2005 - chap 6, eqn 3
+' Valid from -5000m to 11000m
+
+    STD_Press = 101.325 * (1 - 0.0000225577 * Elevation) ^ 5.2559
+End Function
+
+Function STD_Temp(Elevation)
+' Module to calculate the standard temperature [degC] at given elevation (meters)
+'   ASHRAE Fundamentals 2005 - chap 6, eqn 4
+' Valid from -5000m to 11000m
+    STD_Temp = 15 - 0.0065 * Elevation
+End Function
