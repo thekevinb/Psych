@@ -262,11 +262,13 @@ Function Wet_bulb(Tdb, RH, P)
 
     W_normal = Hum_rat2(Tdb, RH, P)
     Wet_bulb = Tdb
-    ' Solve to within 0.001% accuracy using Newton-Rhapson
+    Step_Size = 0.00001 'Step Size for Newton-Rhapson in W
+    
+    ' Solve to within 1.5 Step_Size accuracy using Newton-Rhapson
     W_new = Hum_rat(Tdb, Wet_bulb, P)
-    Do While Abs((W_new - W_normal) / W_normal) > 0.00001
-        W_new2 = Hum_rat(Tdb, Wet_bulb - 0.001, P)
-        dw_dtwb = (W_new - W_new2) / 0.001
+    Do While Abs(W_new - W_normal) > 1.5 * Step_Size
+        W_new2 = Hum_rat(Tdb, Wet_bulb - Step_Size, P)
+        dw_dtwb = (W_new - W_new2) / Step_Size
         Wet_bulb = Wet_bulb - (W_new - W_normal) / dw_dtwb
         W_new = Hum_rat(Tdb, Wet_bulb, P)
     Loop
@@ -337,3 +339,4 @@ Function STD_Temp(Elevation)
 ' Valid from -5000m to 11000m
     STD_Temp = 15 - 0.0065 * Elevation
 End Function
+
